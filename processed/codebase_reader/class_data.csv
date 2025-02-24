@@ -1,0 +1,482 @@
+file_path,class_name,constructor_declaration,method_declarations,source_code,references
+/Users/absonson/Projects/codebase_reader/vector_database/models.py,Method,,,"class Method(LanceModel):
+    code: str = model.SourceField()
+    method_embeddings: Vector(EMBEDDING_DIM) = model.VectorField()
+    file_path: str
+    class_name: str
+    name: str
+    doc_comment: str
+    source_code: str
+    references: str",
+/Users/absonson/Projects/codebase_reader/vector_database/models.py,Class,,,"class Class(LanceModel):
+    source_code: str = model.SourceField()
+    class_embeddings: Vector(EMBEDDING_DIM) = model.VectorField()
+    file_path: str
+    class_name: str
+    constructor_declaration: str
+    method_declarations: str
+    references: str",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/language_enum.py,LanguageEnum,,,"class LanguageEnum(Enum):
+    PYTHON = ""python""
+    UNKNOWN = ""unknown""",/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py:28:37; /Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py:14:34; /Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/file_loader.py:14:55; /Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/file_loader.py:11:51
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py,Treesitter,,"def __init__(self, language: LanguageEnum):
+        self.language_enum = language
+        self.parser = get_parser(language.value)
+        self.language_obj = get_language(language.value)
+        self.query_config = LANGUAGE_QUERIES.get(language)
+        if not self.query_config:
+            raise ValueError(f""Unsupported language: {language}"")
+
+        # Corrected query instantiation
+        self.class_query = self.language_obj.query(self.query_config['class_query'])
+        self.method_query = self.language_obj.query(self.query_config['method_query'])
+        self.doc_query = self.language_obj.query(self.query_config['doc_query'])
+-----
+def create_treesitter(language: LanguageEnum) -> ""Treesitter"":
+        return Treesitter(language)
+-----
+def parse(self, file_bytes: bytes) -> tuple[list[TreesitterClassNode], list[TreesitterMethodNode]]:
+        tree = self.parser.parse(file_bytes)
+        root_node = tree.root_node
+
+        class_results = []
+        method_results = []
+
+        class_name_by_node = {}
+        class_captures = self.class_query.captures(root_node)
+        class_nodes = []
+        for node, capture_name in class_captures:
+            if capture_name == 'class.name':
+                class_name = node.text.decode()
+                class_node = node.parent
+                logging.info(f""Found class: {class_name}"")
+                class_name_by_node[class_node.id] = class_name
+                method_declarations = self._extract_methods_in_class(class_node)
+                class_results.append(TreesitterClassNode(class_name, method_declarations, class_node))
+                class_nodes.append(class_node)
+
+        method_captures = self.method_query.captures(root_node)
+        for node, capture_name in method_captures:
+            if capture_name in ['method.name', 'function.name']:
+                method_name = node.text.decode()
+                method_node = node.parent
+                method_source_code = method_node.text.decode()
+                doc_comment = self._extract_doc_comment(method_node)
+                parent_class_name = None
+                for class_node in class_nodes:
+                    if self._is_descendant_of(method_node, class_node):
+                        parent_class_name = class_name_by_node[class_node.id]
+                        break
+                method_results.append(TreesitterMethodNode(
+                    name=method_name,
+                    doc_comment=doc_comment,
+                    method_source_code=method_source_code,
+                    node=method_node,
+                    class_name=parent_class_name
+                ))
+
+        return class_results, method_results
+-----
+def _extract_methods_in_class(self, class_node):
+        method_declarations = []
+        # Apply method_query to the class_node
+        method_captures = self.method_query.captures(class_node)
+        for node, capture_name in method_captures:
+            if capture_name in ['method.name', 'function.name']:
+                method_declaration = node.parent.text.decode()
+                method_declarations.append(method_declaration)
+        return method_declarations
+-----
+def _extract_doc_comment(self, node):
+        # Search for doc comments preceding the node
+        doc_comment = ''
+        current_node = node.prev_sibling
+        while current_node:
+            captures = self.doc_query.captures(current_node)
+            if captures:
+                for cap_node, cap_name in captures:
+                    if cap_name == 'comment':
+                        doc_comment = cap_node.text.decode() + '\n' + doc_comment
+            elif current_node.type not in ['comment', 'block_comment', 'line_comment', 'expression_statement']:
+                # Stop if we reach a node that's not a comment
+                break
+            current_node = current_node.prev_sibling
+        return doc_comment.strip()
+-----
+def _is_descendant_of(self, node, ancestor):
+        # Check if 'node' is a descendant of 'ancestor'
+        current = node.parent
+        while current:
+            if current == ancestor:
+                return True
+            current = current.parent
+        return False","class Treesitter(ABC):
+    def __init__(self, language: LanguageEnum):
+        self.language_enum = language
+        self.parser = get_parser(language.value)
+        self.language_obj = get_language(language.value)
+        self.query_config = LANGUAGE_QUERIES.get(language)
+        if not self.query_config:
+            raise ValueError(f""Unsupported language: {language}"")
+
+        # Corrected query instantiation
+        self.class_query = self.language_obj.query(self.query_config['class_query'])
+        self.method_query = self.language_obj.query(self.query_config['method_query'])
+        self.doc_query = self.language_obj.query(self.query_config['doc_query'])
+
+    @staticmethod
+    def create_treesitter(language: LanguageEnum) -> ""Treesitter"":
+        return Treesitter(language)
+
+    def parse(self, file_bytes: bytes) -> tuple[list[TreesitterClassNode], list[TreesitterMethodNode]]:
+        tree = self.parser.parse(file_bytes)
+        root_node = tree.root_node
+
+        class_results = []
+        method_results = []
+
+        class_name_by_node = {}
+        class_captures = self.class_query.captures(root_node)
+        class_nodes = []
+        for node, capture_name in class_captures:
+            if capture_name == 'class.name':
+                class_name = node.text.decode()
+                class_node = node.parent
+                logging.info(f""Found class: {class_name}"")
+                class_name_by_node[class_node.id] = class_name
+                method_declarations = self._extract_methods_in_class(class_node)
+                class_results.append(TreesitterClassNode(class_name, method_declarations, class_node))
+                class_nodes.append(class_node)
+
+        method_captures = self.method_query.captures(root_node)
+        for node, capture_name in method_captures:
+            if capture_name in ['method.name', 'function.name']:
+                method_name = node.text.decode()
+                method_node = node.parent
+                method_source_code = method_node.text.decode()
+                doc_comment = self._extract_doc_comment(method_node)
+                parent_class_name = None
+                for class_node in class_nodes:
+                    if self._is_descendant_of(method_node, class_node):
+                        parent_class_name = class_name_by_node[class_node.id]
+                        break
+                method_results.append(TreesitterMethodNode(
+                    name=method_name,
+                    doc_comment=doc_comment,
+                    method_source_code=method_source_code,
+                    node=method_node,
+                    class_name=parent_class_name
+                ))
+
+        return class_results, method_results
+
+    def _extract_methods_in_class(self, class_node):
+        method_declarations = []
+        # Apply method_query to the class_node
+        method_captures = self.method_query.captures(class_node)
+        for node, capture_name in method_captures:
+            if capture_name in ['method.name', 'function.name']:
+                method_declaration = node.parent.text.decode()
+                method_declarations.append(method_declaration)
+        return method_declarations
+
+    def _extract_doc_comment(self, node):
+        # Search for doc comments preceding the node
+        doc_comment = ''
+        current_node = node.prev_sibling
+        while current_node:
+            captures = self.doc_query.captures(current_node)
+            if captures:
+                for cap_node, cap_name in captures:
+                    if cap_name == 'comment':
+                        doc_comment = cap_node.text.decode() + '\n' + doc_comment
+            elif current_node.type not in ['comment', 'block_comment', 'line_comment', 'expression_statement']:
+                # Stop if we reach a node that's not a comment
+                break
+            current_node = current_node.prev_sibling
+        return doc_comment.strip()
+
+    def _is_descendant_of(self, node, ancestor):
+        # Check if 'node' is a descendant of 'ancestor'
+        current = node.parent
+        while current:
+            if current == ancestor:
+                return True
+            current = current.parent
+        return False",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/nodes.py,TreesitterMethodNode,,"def __init__(
+        self,
+        name: str,
+        doc_comment: str,
+        method_source_code: str,
+        node,
+        class_name: str = None
+    ):
+        self.name = name
+        self.doc_comment = doc_comment
+        self.method_source_code = method_source_code
+        self.node = node
+        self.class_name = class_name","class TreesitterMethodNode:
+    def __init__(
+        self,
+        name: str,
+        doc_comment: str,
+        method_source_code: str,
+        node,
+        class_name: str = None
+    ):
+        self.name = name
+        self.doc_comment = doc_comment
+        self.method_source_code = method_source_code
+        self.node = node
+        self.class_name = class_name",/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py:31:81
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/nodes.py,TreesitterClassNode,,"def __init__(
+        self,
+        name: str,
+        method_declarations: list,
+        node,
+    ):
+        self.name = name
+        self.source_code = node.text.decode()
+        self.method_declarations = method_declarations
+        self.node = node","class TreesitterClassNode:
+    def __init__(
+        self,
+        name: str,
+        method_declarations: list,
+        node,
+    ):
+        self.name = name
+        self.source_code = node.text.decode()
+        self.method_declarations = method_declarations
+        self.node = node",/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py:31:54
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,FileInfo,,,"class FileInfo:
+    filepath: str
+    module_docstring: str",/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py:105:35
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,Dependency,,,"class Dependency:
+    file_id: int
+    name: str
+    line: int",/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py:113:42
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,ClassInfo,,,"class ClassInfo:
+    file_id: int
+    name: str
+    line: int
+    docstring: str",/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py:120:37
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,FunctionInfo,,,"class FunctionInfo:
+    file_id: int
+    name: str
+    line: int
+    docstring: str
+    class_name: str = None",/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py:127:43
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,VariableInfo,,,"class VariableInfo:
+    file_id: int
+    name: str
+    line: int",/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py:135:43
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,,"def __init__(self, db_path: str = ""processed/codebase.db""):
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(db_path)
+        self.cursor = self.conn.cursor()
+        self._create_tables()
+-----
+def _create_tables(self):
+        # Create files table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filepath TEXT UNIQUE NOT NULL,
+                module_docstring TEXT
+            )
+        """""")
+
+        # Create dependencies table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create classes table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS classes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                docstring TEXT,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create functions table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS functions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                docstring TEXT,
+                class_name TEXT,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create variables table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS variables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+        
+        self.conn.commit()
+-----
+def add_file(self, file_info: FileInfo) -> int:
+        self.cursor.execute(
+            ""INSERT INTO files (filepath, module_docstring) VALUES (?, ?)"",
+            (file_info.filepath, file_info.module_docstring)
+        )
+        self.conn.commit()
+        return self.cursor.lastrowid
+-----
+def add_dependency(self, dependency: Dependency):
+        self.cursor.execute(
+            ""INSERT INTO dependencies (file_id, name, line) VALUES (?, ?, ?)"",
+            (dependency.file_id, dependency.name, dependency.line)
+        )
+        self.conn.commit()
+-----
+def add_class(self, class_info: ClassInfo):
+        self.cursor.execute(
+            ""INSERT INTO classes (file_id, name, line, docstring) VALUES (?, ?, ?, ?)"",
+            (class_info.file_id, class_info.name, class_info.line, class_info.docstring)
+        )
+        self.conn.commit()
+-----
+def add_function(self, function_info: FunctionInfo):
+        self.cursor.execute(
+            ""INSERT INTO functions (file_id, name, line, docstring, class_name) VALUES (?, ?, ?, ?, ?)"",
+            (function_info.file_id, function_info.name, function_info.line, 
+             function_info.docstring, function_info.class_name)
+        )
+        self.conn.commit()
+-----
+def add_variable(self, variable_info: VariableInfo):
+        self.cursor.execute(
+            ""INSERT INTO variables (file_id, name, line) VALUES (?, ?, ?)"",
+            (variable_info.file_id, variable_info.name, variable_info.line)
+        )
+        self.conn.commit()
+-----
+def close(self):
+        self.conn.close()","class DatabaseWriter:
+    def __init__(self, db_path: str = ""processed/codebase.db""):
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(db_path)
+        self.cursor = self.conn.cursor()
+        self._create_tables()
+
+    def _create_tables(self):
+        # Create files table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filepath TEXT UNIQUE NOT NULL,
+                module_docstring TEXT
+            )
+        """""")
+
+        # Create dependencies table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create classes table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS classes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                docstring TEXT,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create functions table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS functions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                docstring TEXT,
+                class_name TEXT,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create variables table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS variables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+        
+        self.conn.commit()
+
+    def add_file(self, file_info: FileInfo) -> int:
+        self.cursor.execute(
+            ""INSERT INTO files (filepath, module_docstring) VALUES (?, ?)"",
+            (file_info.filepath, file_info.module_docstring)
+        )
+        self.conn.commit()
+        return self.cursor.lastrowid
+
+    def add_dependency(self, dependency: Dependency):
+        self.cursor.execute(
+            ""INSERT INTO dependencies (file_id, name, line) VALUES (?, ?, ?)"",
+            (dependency.file_id, dependency.name, dependency.line)
+        )
+        self.conn.commit()
+
+    def add_class(self, class_info: ClassInfo):
+        self.cursor.execute(
+            ""INSERT INTO classes (file_id, name, line, docstring) VALUES (?, ?, ?, ?)"",
+            (class_info.file_id, class_info.name, class_info.line, class_info.docstring)
+        )
+        self.conn.commit()
+
+    def add_function(self, function_info: FunctionInfo):
+        self.cursor.execute(
+            ""INSERT INTO functions (file_id, name, line, docstring, class_name) VALUES (?, ?, ?, ?, ?)"",
+            (function_info.file_id, function_info.name, function_info.line, 
+             function_info.docstring, function_info.class_name)
+        )
+        self.conn.commit()
+
+    def add_variable(self, variable_info: VariableInfo):
+        self.cursor.execute(
+            ""INSERT INTO variables (file_id, name, line) VALUES (?, ?, ?)"",
+            (variable_info.file_id, variable_info.name, variable_info.line)
+        )
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()",

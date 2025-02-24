@@ -1,0 +1,963 @@
+file_path,class_name,constructor_declaration,method_declarations,source_code,references
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/llms/prompt/impl/openai_impl.py,GPTImpl,,"def __init__(self, instruction):
+        self.instruction = instruction
+-----
+def getInstruction(self):
+        
+        system_prompt = f""""""
+            Você é um assistente que converte listas de compras em formato JSON.
+                Você deve corrigir erros de digitação e de escrita.
+                Converta a lista de compras fornecida em um array JSON onde cada item tem:
+                  - name: nome do produto
+                  - category: categoria do produto (se especificada)
+                  - brand: marca do produto (se especificada)
+                  - details: detalhes adicionais do produto (se especificados)
+            """"""
+
+        user_prompt = f""{self.instruction}""
+
+        client = GPTClient()
+        
+        return client.getInstruction (system_prompt, user_prompt)","class GPTImpl() :
+    def __init__(self, instruction):
+        self.instruction = instruction
+
+    def getInstruction(self):
+        
+        system_prompt = f""""""
+            Você é um assistente que converte listas de compras em formato JSON.
+                Você deve corrigir erros de digitação e de escrita.
+                Converta a lista de compras fornecida em um array JSON onde cada item tem:
+                  - name: nome do produto
+                  - category: categoria do produto (se especificada)
+                  - brand: marca do produto (se especificada)
+                  - details: detalhes adicionais do produto (se especificados)
+            """"""
+
+        user_prompt = f""{self.instruction}""
+
+        client = GPTClient()
+        
+        return client.getInstruction (system_prompt, user_prompt)",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/llms/prompt/client/openai_client.py,GPTClient,,"def __init__(self,model=""gpt-3.5-turbo"",temperature=0.7):
+        self.api_key = os.getenv(""OPENAI_API_KEY"")
+        self.model = model
+        self.temperature = temperature
+        self.client = openai.OpenAI(api_key=os.getenv(""OPENAI_API_KEY""))
+-----
+def getInstruction(self, system_prompt, user_prompt):
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {""role"": ""system"", ""content"": system_prompt},
+                {""role"": ""user"", ""content"": user_prompt}
+            ],
+            temperature=self.temperature,
+        )
+        
+        return response.choices[0].message.content","class GPTClient:
+    def __init__(self,model=""gpt-3.5-turbo"",temperature=0.7):
+        self.api_key = os.getenv(""OPENAI_API_KEY"")
+        self.model = model
+        self.temperature = temperature
+        self.client = openai.OpenAI(api_key=os.getenv(""OPENAI_API_KEY""))
+        
+    def getInstruction(self, system_prompt, user_prompt):
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {""role"": ""system"", ""content"": system_prompt},
+                {""role"": ""user"", ""content"": user_prompt}
+            ],
+            temperature=self.temperature,
+        )
+        
+        return response.choices[0].message.content",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,,"def __init__(self, db_file: str = ""embeddings.db""):
+        db_dir = os.path.join(os.path.dirname(__file__), ""../database"")
+        # Create the directory if it doesn't exist
+        os.makedirs(db_dir, exist_ok=True)
+        self.db_file = os.path.join(db_dir, db_file)
+        # self.db_file = db_file
+-----
+def _get_connection(self) -> sqlite3.Connection:
+        """"""Retorna uma conexão com o banco de dados.""""""
+        return sqlite3.connect(self.db_file)
+-----
+def create_tables(self) -> None:
+        """"""Cria as tabelas necessárias no banco de dados.""""""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY,
+                    product TEXT,
+                    product_embedding TEXT,
+                    description TEXT,
+                    price REAL,
+                    brand TEXT,
+                    category TEXT,
+                    market_name TEXT
+                )
+            ''')
+            conn.commit()
+        finally:
+            conn.close()
+-----
+def insert_document(self, product: str, product_embedding: List[float], description: str, 
+                       price: float, brand: str, category: str, market_name: str) -> None:
+        """"""
+        Insere um novo documento com seus dados no banco de dados.
+        
+        Args:
+            product: Nome do produto
+            product_embedding: Lista de floats representando a embedding do produto
+            description: Descrição do produto
+            price: Preço do produto
+            brand: Marca do produto
+            category: Categoria do produto
+            market_name: Nome do mercado
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            embedding_str = json.dumps(product_embedding)
+            c.execute(""""""
+                INSERT INTO documents (product, product_embedding, description, price, brand, category, market_name) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """""", (product, embedding_str, description, price, brand, category, market_name))
+            conn.commit()
+        finally:
+            conn.close()
+-----
+def get_all_documents(self) -> List[Tuple[int, str, List[float], str, float, str, str, str]]:
+        """"""
+        Recupera todos os documentos do banco de dados.
+        
+        Returns:
+            Lista de tuplas (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""SELECT * FROM documents"")
+            rows = c.fetchall()
+            
+            documents = []
+            for row in rows:
+                doc_id, product, embedding_str, description, price, brand, category, market_name = row
+                embedding = json.loads(embedding_str)
+                documents.append((doc_id, product, embedding, description, price, brand, category, market_name))
+            return documents
+        finally:
+            conn.close()
+-----
+def clear_documents(self) -> None:
+        """"""Remove todos os documentos do banco de dados.""""""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""DELETE FROM documents"")
+            conn.commit()
+        finally:
+            conn.close()
+-----
+def get_document_by_id(self, doc_id: int) -> Optional[Tuple[int, str, List[float], str, float, str, str, str]]:
+        """"""
+        Recupera um documento específico pelo ID.
+        
+        Args:
+            doc_id: ID do documento
+
+        Returns:
+            Tupla (id, produto, embedding, descrição, preço, marca, categoria, mercado) ou None se não encontrado
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""SELECT * FROM documents WHERE id = ?"", (doc_id,))
+            row = c.fetchone()
+            
+            if row:
+                doc_id, product, embedding_str, description, price, brand, category, market_name = row
+                embedding = json.loads(embedding_str)
+                return (doc_id, product, embedding, description, price, brand, category, market_name)
+            return None
+        finally:
+            conn.close()","class DBManager:
+    """"""Gerenciador de operações do banco de dados SQLite.""""""
+    
+    def __init__(self, db_file: str = ""embeddings.db""):
+        db_dir = os.path.join(os.path.dirname(__file__), ""../database"")
+        # Create the directory if it doesn't exist
+        os.makedirs(db_dir, exist_ok=True)
+        self.db_file = os.path.join(db_dir, db_file)
+        # self.db_file = db_file
+
+    def _get_connection(self) -> sqlite3.Connection:
+        """"""Retorna uma conexão com o banco de dados.""""""
+        return sqlite3.connect(self.db_file)
+
+    def create_tables(self) -> None:
+        """"""Cria as tabelas necessárias no banco de dados.""""""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY,
+                    product TEXT,
+                    product_embedding TEXT,
+                    description TEXT,
+                    price REAL,
+                    brand TEXT,
+                    category TEXT,
+                    market_name TEXT
+                )
+            ''')
+            conn.commit()
+        finally:
+            conn.close()
+
+    def insert_document(self, product: str, product_embedding: List[float], description: str, 
+                       price: float, brand: str, category: str, market_name: str) -> None:
+        """"""
+        Insere um novo documento com seus dados no banco de dados.
+        
+        Args:
+            product: Nome do produto
+            product_embedding: Lista de floats representando a embedding do produto
+            description: Descrição do produto
+            price: Preço do produto
+            brand: Marca do produto
+            category: Categoria do produto
+            market_name: Nome do mercado
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            embedding_str = json.dumps(product_embedding)
+            c.execute(""""""
+                INSERT INTO documents (product, product_embedding, description, price, brand, category, market_name) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """""", (product, embedding_str, description, price, brand, category, market_name))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_all_documents(self) -> List[Tuple[int, str, List[float], str, float, str, str, str]]:
+        """"""
+        Recupera todos os documentos do banco de dados.
+        
+        Returns:
+            Lista de tuplas (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""SELECT * FROM documents"")
+            rows = c.fetchall()
+            
+            documents = []
+            for row in rows:
+                doc_id, product, embedding_str, description, price, brand, category, market_name = row
+                embedding = json.loads(embedding_str)
+                documents.append((doc_id, product, embedding, description, price, brand, category, market_name))
+            return documents
+        finally:
+            conn.close()
+
+    def clear_documents(self) -> None:
+        """"""Remove todos os documentos do banco de dados.""""""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""DELETE FROM documents"")
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_document_by_id(self, doc_id: int) -> Optional[Tuple[int, str, List[float], str, float, str, str, str]]:
+        """"""
+        Recupera um documento específico pelo ID.
+        
+        Args:
+            doc_id: ID do documento
+
+        Returns:
+            Tupla (id, produto, embedding, descrição, preço, marca, categoria, mercado) ou None se não encontrado
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""SELECT * FROM documents WHERE id = ?"", (doc_id,))
+            row = c.fetchone()
+            
+            if row:
+                doc_id, product, embedding_str, description, price, brand, category, market_name = row
+                embedding = json.loads(embedding_str)
+                return (doc_id, product, embedding, description, price, brand, category, market_name)
+            return None
+        finally:
+            conn.close()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/usecases/generate_grocery_list.py,GenerateGroceryListUseCase,,"def __init__ (self, instruction):
+        self.instruction = instruction
+-----
+def execute(self):
+        gpt = GPTImpl(self.instruction)
+        list = gpt.getInstruction()
+        print(""list ->"", list)
+        return ProductSearch().search(list)","class GenerateGroceryListUseCase:
+    def __init__ (self, instruction):
+        self.instruction = instruction
+
+    def execute(self):
+        gpt = GPTImpl(self.instruction)
+        list = gpt.getInstruction()
+        print(""list ->"", list)
+        return ProductSearch().search(list)",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/product_search_service.py,ProductSearch,,"def __init__(self):
+        pass
+-----
+def parse_document_text(self,doc):
+        """"""
+        Converte os dados do documento em um dicionário estruturado.
+        
+        Args:
+            doc: Tupla contendo os dados do documento (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+            
+        Returns:
+            Dict com as informações parseadas
+        """"""
+        return {
+            ""Produto"": doc[1],
+            ""Descrição"": doc[3],
+            ""Preço"": f""R$ {doc[4]:.2f}"",
+            ""Marca"": doc[5],
+            ""Categoria"": doc[6],
+            ""Mercado"": doc[7]
+        }
+-----
+def load_embeddings_from_db(self):
+        """"""Recupera todos os documentos e suas embeddings armazenadas no banco de dados SQLite.""""""
+        return db_manager.get_all_documents()
+-----
+def normalize_text(self,text):
+        """"""
+        Normaliza o texto removendo acentos e convertendo para minúsculas.
+        
+        Args:
+            text: Texto a ser normalizado
+            
+        Returns:
+            Texto normalizado
+        """"""
+        import unicodedata
+        
+        # Remove acentos
+        normalized = unicodedata.normalize('NFKD', text)
+        normalized = ''.join(c for c in normalized if not unicodedata.combining(c))
+        
+        # Converte para minúsculas
+        return normalized.lower()
+-----
+def search(self,list):
+        print(""\n🔄 Inicializando sistema de busca de produtos...\n"")
+        print(""="" * 50)
+        
+        # Carrega os documentos com embeddings do BD
+        documents = self.load_embeddings_from_db()
+        if not documents:
+            print(""❌ Erro: Não há embeddings no banco de dados."")
+            print(""💡 Execute primeiro: python generate_embedding.py"")
+            return
+
+        # Recebe a lista de compras do usuário
+        print(""🛒 Bem-vindo ao assistente de compras!"")
+        print(""="" * 50)
+        print(list,""olha lista"")
+        
+        shopping_items = eval(list)
+
+        print(shopping_items,""olha shopping_items"")
+
+        results = {}
+        print(""\n🔍 Buscando produtos nos mercados..."")
+        print(""="" * 50)
+        
+        # Para cada item da lista de compras, busca produtos similares no BD
+        for item in shopping_items:
+            product_name = item.get(""name"", """").strip()
+            if not product_name:
+                continue
+            
+            category = item.get(""category"", """").lower()
+            brand = item.get(""brand"", """").lower()
+            
+            normalized_query = self.normalize_text(product_name)
+            print(f""\n📦 Analisando: '{product_name}'"")
+            print(f""🔤 Query de busca normalizada: '{normalized_query}'"")
+            
+            # Primeiro filtro: busca por substring no nome do produto
+            filtered_products = []
+            for doc in documents:
+                normalized_product = self.normalize_text(doc[1])  # doc[1] é o nome do produto
+                if normalized_query in normalized_product:
+                    filtered_products.append(doc)
+            
+            print(f""🎯 Produtos encontrados na busca inicial: {len(filtered_products)}"")
+            
+            # Se encontrou produtos, aplica a similaridade de cosseno
+            matching_products = []
+            seen_products = set()  # Para controlar duplicatas
+            
+            if filtered_products:
+                query_embedding = compute_embedding.compute_embedding(product_name)
+                
+                # Aplica similaridade de cosseno nos produtos filtrados
+                for doc in filtered_products:
+                    sim = cosine_similarity(query_embedding, doc[2])
+                    # Verifica similaridade e filtros adicionais
+                    if sim >= 0.75:
+                        # Aplica filtros de categoria e marca se especificados
+                        doc_category = doc[6].lower() if doc[6] else """"
+                        doc_brand = doc[5].lower() if doc[5] else """"
+                        
+                        if (not category or category in doc_category) and \
+                        (not brand or brand in doc_brand):
+                            parsed = self.parse_document_text(doc)
+                            product_key = (doc[1], doc[4], doc[7])  # produto, preço e mercado como chave única
+                            
+                            # Evita duplicatas
+                            if product_key not in seen_products:
+                                seen_products.add(product_key)
+                                matching_products.append({
+                                    ""nome"": parsed[""Produto""],
+                                    ""descricao"": parsed[""Descrição""],
+                                    ""marca"": parsed[""Marca""],
+                                    ""categoria"": parsed[""Categoria""],
+                                    ""valor"": parsed[""Preço""],
+                                    ""mercado"": parsed[""Mercado""],
+                                    ""similaridade"": sim
+                                })
+            
+            # Ordena os produtos por similaridade
+            matching_products.sort(key=lambda x: x[""similaridade""], reverse=True)
+            
+            results[product_name] = matching_products
+            print(f""✅ Encontrados {len(matching_products)} produtos similares após filtros"")
+
+        print(""\n🎯 Resultado final da busca:"")
+        print(""="" * 50)
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+        print(""\n✨ Busca finalizada!"")
+        return results","class ProductSearch:
+    
+    def __init__(self):
+        pass
+
+    def parse_document_text(self,doc):
+        """"""
+        Converte os dados do documento em um dicionário estruturado.
+        
+        Args:
+            doc: Tupla contendo os dados do documento (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+            
+        Returns:
+            Dict com as informações parseadas
+        """"""
+        return {
+            ""Produto"": doc[1],
+            ""Descrição"": doc[3],
+            ""Preço"": f""R$ {doc[4]:.2f}"",
+            ""Marca"": doc[5],
+            ""Categoria"": doc[6],
+            ""Mercado"": doc[7]
+        }
+
+    def load_embeddings_from_db(self):
+        """"""Recupera todos os documentos e suas embeddings armazenadas no banco de dados SQLite.""""""
+        return db_manager.get_all_documents()
+
+    def normalize_text(self,text):
+        """"""
+        Normaliza o texto removendo acentos e convertendo para minúsculas.
+        
+        Args:
+            text: Texto a ser normalizado
+            
+        Returns:
+            Texto normalizado
+        """"""
+        import unicodedata
+        
+        # Remove acentos
+        normalized = unicodedata.normalize('NFKD', text)
+        normalized = ''.join(c for c in normalized if not unicodedata.combining(c))
+        
+        # Converte para minúsculas
+        return normalized.lower()
+
+    def search(self,list):
+        print(""\n🔄 Inicializando sistema de busca de produtos...\n"")
+        print(""="" * 50)
+        
+        # Carrega os documentos com embeddings do BD
+        documents = self.load_embeddings_from_db()
+        if not documents:
+            print(""❌ Erro: Não há embeddings no banco de dados."")
+            print(""💡 Execute primeiro: python generate_embedding.py"")
+            return
+
+        # Recebe a lista de compras do usuário
+        print(""🛒 Bem-vindo ao assistente de compras!"")
+        print(""="" * 50)
+        print(list,""olha lista"")
+        
+        shopping_items = eval(list)
+
+        print(shopping_items,""olha shopping_items"")
+
+        results = {}
+        print(""\n🔍 Buscando produtos nos mercados..."")
+        print(""="" * 50)
+        
+        # Para cada item da lista de compras, busca produtos similares no BD
+        for item in shopping_items:
+            product_name = item.get(""name"", """").strip()
+            if not product_name:
+                continue
+            
+            category = item.get(""category"", """").lower()
+            brand = item.get(""brand"", """").lower()
+            
+            normalized_query = self.normalize_text(product_name)
+            print(f""\n📦 Analisando: '{product_name}'"")
+            print(f""🔤 Query de busca normalizada: '{normalized_query}'"")
+            
+            # Primeiro filtro: busca por substring no nome do produto
+            filtered_products = []
+            for doc in documents:
+                normalized_product = self.normalize_text(doc[1])  # doc[1] é o nome do produto
+                if normalized_query in normalized_product:
+                    filtered_products.append(doc)
+            
+            print(f""🎯 Produtos encontrados na busca inicial: {len(filtered_products)}"")
+            
+            # Se encontrou produtos, aplica a similaridade de cosseno
+            matching_products = []
+            seen_products = set()  # Para controlar duplicatas
+            
+            if filtered_products:
+                query_embedding = compute_embedding.compute_embedding(product_name)
+                
+                # Aplica similaridade de cosseno nos produtos filtrados
+                for doc in filtered_products:
+                    sim = cosine_similarity(query_embedding, doc[2])
+                    # Verifica similaridade e filtros adicionais
+                    if sim >= 0.75:
+                        # Aplica filtros de categoria e marca se especificados
+                        doc_category = doc[6].lower() if doc[6] else """"
+                        doc_brand = doc[5].lower() if doc[5] else """"
+                        
+                        if (not category or category in doc_category) and \
+                        (not brand or brand in doc_brand):
+                            parsed = self.parse_document_text(doc)
+                            product_key = (doc[1], doc[4], doc[7])  # produto, preço e mercado como chave única
+                            
+                            # Evita duplicatas
+                            if product_key not in seen_products:
+                                seen_products.add(product_key)
+                                matching_products.append({
+                                    ""nome"": parsed[""Produto""],
+                                    ""descricao"": parsed[""Descrição""],
+                                    ""marca"": parsed[""Marca""],
+                                    ""categoria"": parsed[""Categoria""],
+                                    ""valor"": parsed[""Preço""],
+                                    ""mercado"": parsed[""Mercado""],
+                                    ""similaridade"": sim
+                                })
+            
+            # Ordena os produtos por similaridade
+            matching_products.sort(key=lambda x: x[""similaridade""], reverse=True)
+            
+            results[product_name] = matching_products
+            print(f""✅ Encontrados {len(matching_products)} produtos similares após filtros"")
+
+        print(""\n🎯 Resultado final da busca:"")
+        print(""="" * 50)
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+        print(""\n✨ Busca finalizada!"")
+        return results",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/compute_embedding.py,ComputeEmbedding,,"def __init__(self):
+        self.client = OpenAI()
+-----
+def compute_embedding(self, text):
+        """"""Chama a API do OpenAI para computar a embedding para um texto dado.""""""
+        response = self.client.embeddings.create(
+            input=text,
+            model=""text-embedding-ada-002""
+        )
+        embedding = response.data[0].embedding
+        return embedding","class ComputeEmbedding:
+    def __init__(self):
+        self.client = OpenAI()
+
+    def compute_embedding(self, text):
+        """"""Chama a API do OpenAI para computar a embedding para um texto dado.""""""
+        response = self.client.embeddings.create(
+            input=text,
+            model=""text-embedding-ada-002""
+        )
+        embedding = response.data[0].embedding
+        return embedding",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/src/relational_api/modules/models.py,Store,,"def from_json(cls, data):
+        """"""Create a Store instance from a dictionary.""""""
+        return cls(
+            name=data['name'],
+            address=data['address']
+        )
+-----
+def to_json(self):
+        """"""Convert the Store object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name,
+            ""address"": self.address
+        }","class Store(db.Model):
+    """"""
+    This class represents a store in the database.
+
+    A store is a place that sells products. Each store has a name and an address, and it can have multiple products 
+    associated with it. The relationship between a store and products is one-to-many, meaning each store can have 
+    many products, but each product is associated with only one store.
+
+    Attributes:
+        id (int): The unique identifier for the store.
+        name (str): The name of the store.
+        address (str): The physical address of the store.
+
+    Methods:
+        to_json: Converts the Store instance to a dictionary that can be easily serialized to JSON.
+    """"""
+    __tablename__ = 'stores'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    address = db.Column(db.String(200), nullable=False)
+    products = db.relationship('Product', backref='store', lazy=True)
+
+    @classmethod
+    def from_json(cls, data):
+        """"""Create a Store instance from a dictionary.""""""
+        return cls(
+            name=data['name'],
+            address=data['address']
+        )
+
+    def to_json(self):
+        """"""Convert the Store object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name,
+            ""address"": self.address
+        }",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/src/relational_api/modules/models.py,Label,,"def from_json(cls, data):
+        """"""Create a Label instance from a dictionary.""""""
+        return cls(
+            name=data['name']
+        )
+-----
+def to_json(self):
+        """"""Convert the Label object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name
+        }","class Label(db.Model):
+    """"""
+    This class represents a label in the database.
+
+    A label is a tag or category that can be associated with multiple products. Each label has a name, and products
+    can have multiple labels. The relationship between labels and products is many-to-many, facilitated by the 
+    `LabelProd` association table.
+
+    Attributes:
+        id (int): The unique identifier for the label.
+        name (str): The name of the label (e.g., ""Organic"", ""Sale"").
+
+    Methods:
+        to_json: Converts the Label instance to a dictionary that can be easily serialized to JSON.
+    """"""
+    __tablename__ = 'labels'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    products = db.relationship('LabelProd', backref='label', lazy=True)
+
+    @classmethod
+    def from_json(cls, data):
+        """"""Create a Label instance from a dictionary.""""""
+        return cls(
+            name=data['name']
+        )
+
+    def to_json(self):
+        """"""Convert the Label object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name
+        }",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/src/relational_api/modules/models.py,Restriction,,"def from_json(cls, data):
+        """"""Create a Restriction instance from a dictionary.""""""
+        return cls(
+            name=data['name']
+        )
+-----
+def to_json(self):
+        """"""Convert the Restriction object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name
+        }","class Restriction(db.Model):
+    """"""
+    This class represents a restriction in the database.
+
+    A restriction is a condition that can be applied to products, such as age restrictions or food restrictions.
+    Each restriction has a name, and products can have multiple restrictions. The relationship between restrictions 
+    and products is many-to-many, facilitated by the `RestProd` association table.
+
+    Attributes:
+        id (int): The unique identifier for the restriction.
+        name (str): The name of the restriction (e.g., ""18+ Only"", ""No International Shipping"").
+
+    Methods:
+        to_json: Converts the Restriction instance to a dictionary that can be easily serialized to JSON.
+    """"""
+    __tablename__ = 'restrictions'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    products = db.relationship('RestProd', backref='restriction', lazy=True)
+
+    @classmethod
+    def from_json(cls, data):
+        """"""Create a Restriction instance from a dictionary.""""""
+        return cls(
+            name=data['name']
+        )
+
+    def to_json(self):
+        """"""Convert the Restriction object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name
+        }",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/src/relational_api/modules/models.py,Brand,,"def from_json(cls, data):
+        """"""Create a Brand instance from a dictionary.""""""
+        return cls(
+            name=data['name']
+        )
+-----
+def to_json(self):
+        """"""Convert the Brand object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name
+        }","class Brand(db.Model):
+    """"""
+    This class represents a brand in the database.
+
+    A brand is a manufacturer or company that produces products. Each brand has a name, and products can be associated
+    with a specific brand. The relationship between a brand and products is one-to-many, meaning each brand can have 
+    many products, but each product can belong to only one brand.
+
+    Attributes:
+        id (int): The unique identifier for the brand.
+        name (str): The name of the brand (e.g., ""Nike"", ""Apple"").
+
+    Methods:
+        to_json: Converts the Brand instance to a dictionary that can be easily serialized to JSON.
+    """"""
+    __tablename__ = 'brands'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    products = db.relationship('Product', backref='brand', lazy=True)
+
+    @classmethod
+    def from_json(cls, data):
+        """"""Create a Brand instance from a dictionary.""""""
+        return cls(
+            name=data['name']
+        )
+
+    def to_json(self):
+        """"""Convert the Brand object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name
+        }",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/src/relational_api/modules/models.py,Product,,"def from_json(cls, data):
+        """"""Create a Product instance from a dictionary.""""""
+        return cls(
+            name=data['name'],
+            price=data['price'],
+            description=data['description'][:249],
+            id_store=data['id_store'],
+            id_brand=data['id_brand']
+        )
+-----
+def to_json(self):
+        """"""Convert the Product object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name,
+            ""price"": self.price,
+            ""description"": self.description,
+            ""id_store"": self.id_store,
+            ""id_brand"": self.id_brand
+        }","class Product(db.Model):
+    """"""
+    This class represents a product in the database.
+
+    A product is an item that can be sold by a store, and each product has attributes like a name, price, and 
+    description. A product can belong to a store and a brand, and it can have multiple labels and restrictions. 
+
+    Attributes:
+        id (int): The unique identifier for the product.
+        name (str): The name of the product.
+        price (float): The price of the product.
+        description (str): A description of the product.
+        id_store (int): The ID of the store that owns the product.
+        id_brand (int): The ID of the brand associated with the product.
+
+    Methods:
+        to_json: Converts the Product instance to a dictionary that can be easily serialized to JSON.
+    """"""
+    __tablename__ = 'products'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(250), nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    description = db.Column(db.String(500), nullable=True)
+    id_store = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False)
+    id_brand = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=True)
+
+    labels = db.relationship('LabelProd', backref='product', lazy=True)
+    restrictions = db.relationship('RestProd', backref='product', lazy=True)
+
+    @classmethod
+    def from_json(cls, data):
+        """"""Create a Product instance from a dictionary.""""""
+        return cls(
+            name=data['name'],
+            price=data['price'],
+            description=data['description'][:249],
+            id_store=data['id_store'],
+            id_brand=data['id_brand']
+        )
+
+    def to_json(self):
+        """"""Convert the Product object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""name"": self.name,
+            ""price"": self.price,
+            ""description"": self.description,
+            ""id_store"": self.id_store,
+            ""id_brand"": self.id_brand
+        }",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/src/relational_api/modules/models.py,LabelProd,,"def from_json(cls, data):
+        """"""Create a LabelProd instance from a dictionary.""""""
+        return cls(
+            id_prod=data['id_prod'],
+            id_label=data['id_label']
+        )
+-----
+def to_json(self):
+        """"""Convert the LabelProd object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""id_prod"": self.id_prod,
+            ""id_label"": self.id_label
+        }","class LabelProd(db.Model):
+    """"""
+    This class represents the association between products and labels in the database.
+
+    This is a many-to-many relationship between products and labels. A product can have multiple labels, and a label 
+    can be associated with multiple products. This class facilitates that relationship.
+
+    Attributes:
+        id (int): The unique identifier for the association.
+        id_prod (int): The ID of the product.
+        id_label (int): The ID of the label.
+
+    Methods:
+        to_json: Converts the LabelProd instance to a dictionary that can be easily serialized to JSON.
+    """"""
+    __tablename__ = 'label_prods'
+    id = db.Column(db.Integer, primary_key=True)
+    id_prod = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    id_label = db.Column(db.Integer, db.ForeignKey('labels.id'), nullable=False)
+
+    @classmethod
+    def from_json(cls, data):
+        """"""Create a LabelProd instance from a dictionary.""""""
+        return cls(
+            id_prod=data['id_prod'],
+            id_label=data['id_label']
+        )
+
+    def to_json(self):
+        """"""Convert the LabelProd object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""id_prod"": self.id_prod,
+            ""id_label"": self.id_label
+        }",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/src/relational_api/modules/models.py,RestProd,,"def from_json(cls, data):
+        """"""Create a RestProd instance from a dictionary.""""""
+        return cls(
+            id_prod=data['id_prod'],
+            id_rest=data['id_rest']
+        )
+-----
+def to_json(self):
+        """"""Convert the RestProd object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""id_prod"": self.id_prod,
+            ""id_rest"": self.id_rest
+        }","class RestProd(db.Model):
+    """"""
+    This class represents the association between products and restrictions in the database.
+
+    This is a many-to-many relationship between products and restrictions. A product can have multiple restrictions, 
+    and a restriction can be associated with multiple products. This class facilitates that relationship.
+
+    Attributes:
+        id (int): The unique identifier for the association.
+        id_prod (int): The ID of the product.
+        id_rest (int): The ID of the restriction.
+
+    Methods:
+        to_json: Converts the RestProd instance to a dictionary that can be easily serialized to JSON.
+    """"""
+    __tablename__ = 'rest_prods'
+    id = db.Column(db.Integer, primary_key=True)
+    id_prod = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    id_rest = db.Column(db.Integer, db.ForeignKey('restrictions.id'), nullable=False)
+
+    @classmethod
+    def from_json(cls, data):
+        """"""Create a RestProd instance from a dictionary.""""""
+        return cls(
+            id_prod=data['id_prod'],
+            id_rest=data['id_rest']
+        )
+
+    def to_json(self):
+        """"""Convert the RestProd object to a dictionary that can be easily serialized to JSON.""""""
+        return {
+            ""id"": self.id,
+            ""id_prod"": self.id_prod,
+            ""id_rest"": self.id_rest
+        }",

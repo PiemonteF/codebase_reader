@@ -1,0 +1,490 @@
+file_path,class_name,name,doc_comment,source_code,references
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/cli_run/generate_embedding.py,,load_data,,"def load_data():
+    """"""Carrega os dados do arquivo JSON.""""""
+    with open(DATA_FILE, ""r"", encoding=""utf-8"") as f:
+        data = json.load(f)
+    return data",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/cli_run/generate_embedding.py,,extract_documents_from_data,"""""""Carrega os dados do arquivo JSON.""""""","def extract_documents_from_data(data):
+    print(""entrouuuu"")
+    """"""
+    Recebe os dados (lista de mercados) e retorna uma lista de tuplas,
+    onde cada tupla contém as informações do produto necessárias para o banco de dados.
+    """"""
+    docs = []
+    for market in data:
+        market_name = market.get(""nome_mercado"", """")
+        for produto in market.get(""produtos"", []):
+            nome_produto = produto.get(""nome_produto"", """")
+            descricao = produto.get(""descricao"", """").strip()
+            preco = produto.get(""preco"", 0.0)
+            marca = produto.get(""marca"", """")
+            categoria = produto.get(""categoria"", """")
+            
+            # Criamos o texto para gerar o embedding apenas com o nome do produto
+            text_for_embedding = nome_produto
+            
+            docs.append({
+                'product': nome_produto,
+                'description': descricao,
+                'price': preco,
+                'brand': marca,
+                'category': categoria,
+                'market_name': market_name,
+                'text_for_embedding': text_for_embedding
+            })
+    return docs",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/cli_run/generate_embedding.py,,store_embeddings,"""""""Carrega os dados do arquivo JSON.""""""
+""""""
+    Recebe os dados (lista de mercados) e retorna uma lista de tuplas,
+    onde cada tupla contém as informações do produto necessárias para o banco de dados.
+    """"""","def store_embeddings():
+    """"""Carrega os dados do JSON, gera as embeddings para cada documento e armazena em SQLite.""""""
+    if not os.getenv(""OPENAI_API_KEY""):
+        print(""Error: Please set the OPENAI_API_KEY environment variable in your .env file."")
+        return
+
+    db_manager.create_tables()
+    print(""entrou1"")
+    data = load_data()
+    documents = extract_documents_from_data(data)
+    
+    for doc in documents:
+        print(f""Computing embedding for: {doc['product'][:50]}..."")
+        embedding = compute_embedding.compute_embedding(doc['text_for_embedding'])
+        
+        db_manager.insert_document(
+            product=doc['product'],
+            product_embedding=embedding,
+            description=doc['description'],
+            price=doc['price'],
+            brand=doc['brand'],
+            category=doc['category'],
+            market_name=doc['market_name']
+        )
+    
+    print(""All embeddings stored in"", db_manager.db_file)",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/cli_run/generate_embedding.py,,load_embeddings_from_db,"""""""Carrega os dados do arquivo JSON.""""""
+""""""
+    Recebe os dados (lista de mercados) e retorna uma lista de tuplas,
+    onde cada tupla contém as informações do produto necessárias para o banco de dados.
+    """"""
+""""""Carrega os dados do JSON, gera as embeddings para cada documento e armazena em SQLite.""""""","def load_embeddings_from_db():
+    """"""Recupera todos os documentos e suas embeddings armazenadas no banco de dados SQLite.""""""
+    return db_manager.get_all_documents()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/cli_run/generate_embedding.py,,main,"""""""Carrega os dados do arquivo JSON.""""""
+""""""
+    Recebe os dados (lista de mercados) e retorna uma lista de tuplas,
+    onde cada tupla contém as informações do produto necessárias para o banco de dados.
+    """"""
+""""""Carrega os dados do JSON, gera as embeddings para cada documento e armazena em SQLite.""""""
+""""""Recupera todos os documentos e suas embeddings armazenadas no banco de dados SQLite.""""""","def main():
+    """"""Função principal para gerar embeddings.""""""
+    if not os.getenv(""OPENAI_API_KEY""):
+        print(""Error: Please set the OPENAI_API_KEY environment variable in your .env file."")
+        return
+
+    print(""\n🔄 Iniciando geração de embeddings...\n"")
+    print(""="" * 50)
+    
+    store_embeddings()
+    print(""\n✨ Processo finalizado!"")",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/llms/prompt/impl/openai_impl.py,GPTImpl,__init__,,"def __init__(self, instruction):
+        self.instruction = instruction",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/llms/prompt/impl/openai_impl.py,GPTImpl,getInstruction,,"def getInstruction(self):
+        
+        system_prompt = f""""""
+            Você é um assistente que converte listas de compras em formato JSON.
+                Você deve corrigir erros de digitação e de escrita.
+                Converta a lista de compras fornecida em um array JSON onde cada item tem:
+                  - name: nome do produto
+                  - category: categoria do produto (se especificada)
+                  - brand: marca do produto (se especificada)
+                  - details: detalhes adicionais do produto (se especificados)
+            """"""
+
+        user_prompt = f""{self.instruction}""
+
+        client = GPTClient()
+        
+        return client.getInstruction (system_prompt, user_prompt)",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/llms/prompt/client/openai_client.py,GPTClient,__init__,,"def __init__(self,model=""gpt-3.5-turbo"",temperature=0.7):
+        self.api_key = os.getenv(""OPENAI_API_KEY"")
+        self.model = model
+        self.temperature = temperature
+        self.client = openai.OpenAI(api_key=os.getenv(""OPENAI_API_KEY""))",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/llms/prompt/client/openai_client.py,GPTClient,getInstruction,,"def getInstruction(self, system_prompt, user_prompt):
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {""role"": ""system"", ""content"": system_prompt},
+                {""role"": ""user"", ""content"": user_prompt}
+            ],
+            temperature=self.temperature,
+        )
+        
+        return response.choices[0].message.content",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,__init__,"""""""Gerenciador de operações do banco de dados SQLite.""""""","def __init__(self, db_file: str = ""embeddings.db""):
+        db_dir = os.path.join(os.path.dirname(__file__), ""../database"")
+        # Create the directory if it doesn't exist
+        os.makedirs(db_dir, exist_ok=True)
+        self.db_file = os.path.join(db_dir, db_file)
+        # self.db_file = db_file",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,_get_connection,,"def _get_connection(self) -> sqlite3.Connection:
+        """"""Retorna uma conexão com o banco de dados.""""""
+        return sqlite3.connect(self.db_file)",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,create_tables,"""""""Retorna uma conexão com o banco de dados.""""""","def create_tables(self) -> None:
+        """"""Cria as tabelas necessárias no banco de dados.""""""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY,
+                    product TEXT,
+                    product_embedding TEXT,
+                    description TEXT,
+                    price REAL,
+                    brand TEXT,
+                    category TEXT,
+                    market_name TEXT
+                )
+            ''')
+            conn.commit()
+        finally:
+            conn.close()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,insert_document,"""""""Retorna uma conexão com o banco de dados.""""""
+""""""Cria as tabelas necessárias no banco de dados.""""""","def insert_document(self, product: str, product_embedding: List[float], description: str, 
+                       price: float, brand: str, category: str, market_name: str) -> None:
+        """"""
+        Insere um novo documento com seus dados no banco de dados.
+        
+        Args:
+            product: Nome do produto
+            product_embedding: Lista de floats representando a embedding do produto
+            description: Descrição do produto
+            price: Preço do produto
+            brand: Marca do produto
+            category: Categoria do produto
+            market_name: Nome do mercado
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            embedding_str = json.dumps(product_embedding)
+            c.execute(""""""
+                INSERT INTO documents (product, product_embedding, description, price, brand, category, market_name) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """""", (product, embedding_str, description, price, brand, category, market_name))
+            conn.commit()
+        finally:
+            conn.close()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,get_all_documents,"""""""Retorna uma conexão com o banco de dados.""""""
+""""""Cria as tabelas necessárias no banco de dados.""""""
+""""""
+        Insere um novo documento com seus dados no banco de dados.
+        
+        Args:
+            product: Nome do produto
+            product_embedding: Lista de floats representando a embedding do produto
+            description: Descrição do produto
+            price: Preço do produto
+            brand: Marca do produto
+            category: Categoria do produto
+            market_name: Nome do mercado
+        """"""","def get_all_documents(self) -> List[Tuple[int, str, List[float], str, float, str, str, str]]:
+        """"""
+        Recupera todos os documentos do banco de dados.
+        
+        Returns:
+            Lista de tuplas (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""SELECT * FROM documents"")
+            rows = c.fetchall()
+            
+            documents = []
+            for row in rows:
+                doc_id, product, embedding_str, description, price, brand, category, market_name = row
+                embedding = json.loads(embedding_str)
+                documents.append((doc_id, product, embedding, description, price, brand, category, market_name))
+            return documents
+        finally:
+            conn.close()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,clear_documents,"""""""Retorna uma conexão com o banco de dados.""""""
+""""""Cria as tabelas necessárias no banco de dados.""""""
+""""""
+        Insere um novo documento com seus dados no banco de dados.
+        
+        Args:
+            product: Nome do produto
+            product_embedding: Lista de floats representando a embedding do produto
+            description: Descrição do produto
+            price: Preço do produto
+            brand: Marca do produto
+            category: Categoria do produto
+            market_name: Nome do mercado
+        """"""
+""""""
+        Recupera todos os documentos do banco de dados.
+        
+        Returns:
+            Lista de tuplas (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+        """"""","def clear_documents(self) -> None:
+        """"""Remove todos os documentos do banco de dados.""""""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""DELETE FROM documents"")
+            conn.commit()
+        finally:
+            conn.close()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/infrastructure/database/sqlite_manager.py,DBManager,get_document_by_id,"""""""Retorna uma conexão com o banco de dados.""""""
+""""""Cria as tabelas necessárias no banco de dados.""""""
+""""""
+        Insere um novo documento com seus dados no banco de dados.
+        
+        Args:
+            product: Nome do produto
+            product_embedding: Lista de floats representando a embedding do produto
+            description: Descrição do produto
+            price: Preço do produto
+            brand: Marca do produto
+            category: Categoria do produto
+            market_name: Nome do mercado
+        """"""
+""""""
+        Recupera todos os documentos do banco de dados.
+        
+        Returns:
+            Lista de tuplas (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+        """"""
+""""""Remove todos os documentos do banco de dados.""""""","def get_document_by_id(self, doc_id: int) -> Optional[Tuple[int, str, List[float], str, float, str, str, str]]:
+        """"""
+        Recupera um documento específico pelo ID.
+        
+        Args:
+            doc_id: ID do documento
+
+        Returns:
+            Tupla (id, produto, embedding, descrição, preço, marca, categoria, mercado) ou None se não encontrado
+        """"""
+        conn = self._get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(""SELECT * FROM documents WHERE id = ?"", (doc_id,))
+            row = c.fetchone()
+            
+            if row:
+                doc_id, product, embedding_str, description, price, brand, category, market_name = row
+                embedding = json.loads(embedding_str)
+                return (doc_id, product, embedding, description, price, brand, category, market_name)
+            return None
+        finally:
+            conn.close()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/routes/v1/groucery_routes.py,,list_route,,"def list_route():
+    
+    print(""entrou"")
+    data = request.get_json() 
+
+    message = data[""message""]
+    
+    result = GenerateGroceryListUseCase(message).execute()
+    print(""saiu ->"", result)
+    return jsonify({""ingredients"": result})",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/routes/v1/groucery_routes.py,,buy,,"def buy():
+    data = request.get_json()
+    message = data[""message""]
+    
+    return jsonify({""message"": ""Compra realizada com sucesso!""})",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/usecases/generate_grocery_list.py,GenerateGroceryListUseCase,__init__,,"def __init__ (self, instruction):
+        self.instruction = instruction",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/usecases/generate_grocery_list.py,GenerateGroceryListUseCase,execute,,"def execute(self):
+        gpt = GPTImpl(self.instruction)
+        list = gpt.getInstruction()
+        print(""list ->"", list)
+        return ProductSearch().search(list)",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/product_search_service.py,ProductSearch,__init__,,"def __init__(self):
+        pass",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/product_search_service.py,ProductSearch,parse_document_text,,"def parse_document_text(self,doc):
+        """"""
+        Converte os dados do documento em um dicionário estruturado.
+        
+        Args:
+            doc: Tupla contendo os dados do documento (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+            
+        Returns:
+            Dict com as informações parseadas
+        """"""
+        return {
+            ""Produto"": doc[1],
+            ""Descrição"": doc[3],
+            ""Preço"": f""R$ {doc[4]:.2f}"",
+            ""Marca"": doc[5],
+            ""Categoria"": doc[6],
+            ""Mercado"": doc[7]
+        }",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/product_search_service.py,ProductSearch,load_embeddings_from_db,"""""""
+        Converte os dados do documento em um dicionário estruturado.
+        
+        Args:
+            doc: Tupla contendo os dados do documento (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+            
+        Returns:
+            Dict com as informações parseadas
+        """"""","def load_embeddings_from_db(self):
+        """"""Recupera todos os documentos e suas embeddings armazenadas no banco de dados SQLite.""""""
+        return db_manager.get_all_documents()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/product_search_service.py,ProductSearch,normalize_text,"""""""
+        Converte os dados do documento em um dicionário estruturado.
+        
+        Args:
+            doc: Tupla contendo os dados do documento (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+            
+        Returns:
+            Dict com as informações parseadas
+        """"""
+""""""Recupera todos os documentos e suas embeddings armazenadas no banco de dados SQLite.""""""","def normalize_text(self,text):
+        """"""
+        Normaliza o texto removendo acentos e convertendo para minúsculas.
+        
+        Args:
+            text: Texto a ser normalizado
+            
+        Returns:
+            Texto normalizado
+        """"""
+        import unicodedata
+        
+        # Remove acentos
+        normalized = unicodedata.normalize('NFKD', text)
+        normalized = ''.join(c for c in normalized if not unicodedata.combining(c))
+        
+        # Converte para minúsculas
+        return normalized.lower()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/product_search_service.py,ProductSearch,search,"""""""
+        Converte os dados do documento em um dicionário estruturado.
+        
+        Args:
+            doc: Tupla contendo os dados do documento (id, produto, embedding, descrição, preço, marca, categoria, mercado)
+            
+        Returns:
+            Dict com as informações parseadas
+        """"""
+""""""Recupera todos os documentos e suas embeddings armazenadas no banco de dados SQLite.""""""
+""""""
+        Normaliza o texto removendo acentos e convertendo para minúsculas.
+        
+        Args:
+            text: Texto a ser normalizado
+            
+        Returns:
+            Texto normalizado
+        """"""","def search(self,list):
+        print(""\n🔄 Inicializando sistema de busca de produtos...\n"")
+        print(""="" * 50)
+        
+        # Carrega os documentos com embeddings do BD
+        documents = self.load_embeddings_from_db()
+        if not documents:
+            print(""❌ Erro: Não há embeddings no banco de dados."")
+            print(""💡 Execute primeiro: python generate_embedding.py"")
+            return
+
+        # Recebe a lista de compras do usuário
+        print(""🛒 Bem-vindo ao assistente de compras!"")
+        print(""="" * 50)
+        print(list,""olha lista"")
+        
+        shopping_items = eval(list)
+
+        print(shopping_items,""olha shopping_items"")
+
+        results = {}
+        print(""\n🔍 Buscando produtos nos mercados..."")
+        print(""="" * 50)
+        
+        # Para cada item da lista de compras, busca produtos similares no BD
+        for item in shopping_items:
+            product_name = item.get(""name"", """").strip()
+            if not product_name:
+                continue
+            
+            category = item.get(""category"", """").lower()
+            brand = item.get(""brand"", """").lower()
+            
+            normalized_query = self.normalize_text(product_name)
+            print(f""\n📦 Analisando: '{product_name}'"")
+            print(f""🔤 Query de busca normalizada: '{normalized_query}'"")
+            
+            # Primeiro filtro: busca por substring no nome do produto
+            filtered_products = []
+            for doc in documents:
+                normalized_product = self.normalize_text(doc[1])  # doc[1] é o nome do produto
+                if normalized_query in normalized_product:
+                    filtered_products.append(doc)
+            
+            print(f""🎯 Produtos encontrados na busca inicial: {len(filtered_products)}"")
+            
+            # Se encontrou produtos, aplica a similaridade de cosseno
+            matching_products = []
+            seen_products = set()  # Para controlar duplicatas
+            
+            if filtered_products:
+                query_embedding = compute_embedding.compute_embedding(product_name)
+                
+                # Aplica similaridade de cosseno nos produtos filtrados
+                for doc in filtered_products:
+                    sim = cosine_similarity(query_embedding, doc[2])
+                    # Verifica similaridade e filtros adicionais
+                    if sim >= 0.75:
+                        # Aplica filtros de categoria e marca se especificados
+                        doc_category = doc[6].lower() if doc[6] else """"
+                        doc_brand = doc[5].lower() if doc[5] else """"
+                        
+                        if (not category or category in doc_category) and \
+                        (not brand or brand in doc_brand):
+                            parsed = self.parse_document_text(doc)
+                            product_key = (doc[1], doc[4], doc[7])  # produto, preço e mercado como chave única
+                            
+                            # Evita duplicatas
+                            if product_key not in seen_products:
+                                seen_products.add(product_key)
+                                matching_products.append({
+                                    ""nome"": parsed[""Produto""],
+                                    ""descricao"": parsed[""Descrição""],
+                                    ""marca"": parsed[""Marca""],
+                                    ""categoria"": parsed[""Categoria""],
+                                    ""valor"": parsed[""Preço""],
+                                    ""mercado"": parsed[""Mercado""],
+                                    ""similaridade"": sim
+                                })
+            
+            # Ordena os produtos por similaridade
+            matching_products.sort(key=lambda x: x[""similaridade""], reverse=True)
+            
+            results[product_name] = matching_products
+            print(f""✅ Encontrados {len(matching_products)} produtos similares após filtros"")
+
+        print(""\n🎯 Resultado final da busca:"")
+        print(""="" * 50)
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+        print(""\n✨ Busca finalizada!"")
+        return results",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/similarity_search.py,,cosine_similarity,,"def cosine_similarity(a, b):
+    """"""Calcula a similaridade cosseno entre dois vetores a e b.""""""
+    a = np.array(a)
+    b = np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-10)",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/compute_embedding.py,ComputeEmbedding,__init__,,"def __init__(self):
+        self.client = OpenAI()",
+/Users/absonson/Projects/projeto11/2025-1A-T05-CC11-G02/backend/src/services/compute_embedding.py,ComputeEmbedding,compute_embedding,,"def compute_embedding(self, text):
+        """"""Chama a API do OpenAI para computar a embedding para um texto dado.""""""
+        response = self.client.embeddings.create(
+            input=text,
+            model=""text-embedding-ada-002""
+        )
+        embedding = response.data[0].embedding
+        return embedding",

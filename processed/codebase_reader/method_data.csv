@@ -1,0 +1,429 @@
+file_path,class_name,name,doc_comment,source_code,references
+/Users/absonson/Projects/codebase_reader/Preprocessing/preprocessing.py,,main,,"def main(codebase_path: str) -> None:
+    files = load_files(codebase_path)
+    class_data, method_data, class_names, method_names = parse_code_files(files)
+
+    # Find references
+    references = find_references(files, class_names, method_names)
+
+    # Map references back to class and method data
+    class_data_dict = {cd['class_name']: cd for cd in class_data}
+    method_data_dict = {(md['class_name'], md['name']): md for md in method_data}
+
+    for class_name, refs in references['class'].items():
+        if class_name in class_data_dict:
+            class_data_dict[class_name]['references'] = refs
+
+    for method_name, refs in references['method'].items():
+        for key in method_data_dict:
+            if key[1] == method_name:
+                method_data_dict[key]['references'] = refs
+
+    # Convert dictionaries back to lists
+    class_data = list(class_data_dict.values())
+    method_data = list(method_data_dict.values())
+
+    output_directory = create_output_directory(codebase_path)
+    write_class_data_to_csv(class_data, output_directory)
+    write_method_data_to_csv(method_data, output_directory)",
+/Users/absonson/Projects/codebase_reader/vector_database/utils/text_processing.py,,clip_text_to_max_tokens,,"def clip_text_to_max_tokens(text, max_tokens, encoding_name='cl100k_base'):
+    encoding = tiktoken.get_encoding(encoding_name)
+    tokens = encoding.encode(text)
+    original_token_count = len(tokens)
+    
+    print(f""\nOriginal text ({original_token_count} tokens):"")
+    print(""="" * 50)
+    print(text[:200] + ""..."" if len(text) > 200 else text)
+    
+    if original_token_count > max_tokens:
+        tokens = tokens[:max_tokens]
+        clipped_text = encoding.decode(tokens)
+        print(f""\nClipped text ({len(tokens)} tokens):"")
+        print(""="" * 50)
+        print(clipped_text[:200] + ""..."" if len(clipped_text) > 200 else clipped_text)
+        return clipped_text
+    
+    return text",
+/Users/absonson/Projects/codebase_reader/vector_database/utils/text_processing.py,,create_markdown_dataframe,,"def create_markdown_dataframe(markdown_contents):
+    df = pd.DataFrame(list(markdown_contents.items()), columns=['file_path', 'source_code'])
+    df['source_code'] = df.apply(
+        lambda row: f""File: {row['file_path']}\n\nContent:\n{clip_text_to_max_tokens(row['source_code'], MAX_TOKENS)}\n\n"",
+        axis=1
+    )
+    
+    for col in ['class_name', 'constructor_declaration', 'method_declarations', 'references']:
+        df[col] = ""empty""
+    return df",
+/Users/absonson/Projects/codebase_reader/vector_database/utils/file_processing.py,,get_name_and_input_dir,,"def get_name_and_input_dir(codebase_path):
+    normalized_path = os.path.normpath(os.path.abspath(codebase_path))
+    codebase_folder_name = os.path.basename(normalized_path)
+    
+    print(""codebase_folder_name:"", codebase_folder_name)
+    
+    output_directory = os.path.join(""processed"", codebase_folder_name)
+    os.makedirs(output_directory, exist_ok=True)
+    
+    return codebase_folder_name, output_directory",
+/Users/absonson/Projects/codebase_reader/vector_database/utils/file_processing.py,,get_special_files,,"def get_special_files(directory):
+    md_files = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(('.md', '.sh')):
+                full_path = os.path.join(root, file)
+                md_files.append(full_path)
+    return md_files",
+/Users/absonson/Projects/codebase_reader/vector_database/utils/file_processing.py,,process_special_files,,"def process_special_files(md_files):
+    contents = {}
+    for file_path in md_files:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            contents[file_path] = file.read()
+    return contents",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/file_loader.py,,get_language_from_extension,,"def get_language_from_extension(file_ext: str) -> LanguageEnum:
+    return FILE_EXTENSION_LANGUAGE_MAP.get(file_ext)",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/file_loader.py,,load_files,,"def load_files(codebase_path: str) -> List[Tuple[str, LanguageEnum]]:
+    file_list = []
+    for root, dirs, files in os.walk(codebase_path):
+        dirs[:] = [d for d in dirs if d not in BLACKLIST_DIR]
+        for file in files:
+            file_ext = os.path.splitext(file)[1]
+            if file_ext in WHITELIST_FILES and file not in BLACKLIST_FILES:
+                file_path = os.path.join(root, file)
+                language = get_language_from_extension(file_ext)
+                if language:
+                    file_list.append((file_path, language))
+                else:
+                    print(f""Unsupported file extension {file_ext} in file {file_path}. Skipping."")
+    return file_list",
+/Users/absonson/Projects/codebase_reader/Preprocessing/preprocessing.py,,parse_code_files,,"def parse_code_files(file_list):
+    class_data = []
+    method_data = []
+
+    all_class_names = set()
+    all_method_names = set()
+
+    files_by_language = defaultdict(list)
+    for file_path, language in file_list:
+        files_by_language[language].append(file_path)
+
+    for language, files in files_by_language.items():
+        treesitter_parser = Treesitter.create_treesitter(language)
+        for file_path in files:
+            with open(file_path, ""r"", encoding=""utf-8"") as file:
+                code = file.read()
+                file_bytes = code.encode()
+                class_nodes, method_nodes = treesitter_parser.parse(file_bytes)
+
+                # Process class nodes
+                for class_node in class_nodes:
+                    class_name = class_node.name
+                    all_class_names.add(class_name)
+                    class_data.append({
+                        ""file_path"": file_path,
+                        ""class_name"": class_name,
+                        ""constructor_declaration"": """",  # Extract if needed
+                        ""method_declarations"": ""\n-----\n"".join(class_node.method_declarations) if class_node.method_declarations else """",
+                        ""source_code"": class_node.source_code,
+                        ""references"": []  # Will populate later
+                    })
+
+                # Process method nodes
+                for method_node in method_nodes:
+                    method_name = method_node.name
+                    all_method_names.add(method_name)
+                    method_data.append({
+                        ""file_path"": file_path,
+                        ""class_name"": method_node.class_name if method_node.class_name else """",
+                        ""name"": method_name,
+                        ""doc_comment"": method_node.doc_comment,
+                        ""source_code"": method_node.method_source_code,
+                        ""references"": []  # Will populate later
+                    })
+
+    return class_data, method_data, all_class_names, all_method_names",
+/Users/absonson/Projects/codebase_reader/Preprocessing/preprocessing.py,,find_references,,"def find_references(file_list, class_names, method_names):
+    references = {'class': defaultdict(list), 'method': defaultdict(list)}
+    files_by_language = defaultdict(list)
+    
+    # Convert names to sets for O(1) lookup
+    class_names = set(class_names)
+    method_names = set(method_names)
+
+    for file_path, language in file_list:
+        files_by_language[language].append(file_path)
+
+    for language, files in files_by_language.items():
+        treesitter_parser = Treesitter.create_treesitter(language)
+        for file_path in files:
+            with open(file_path, ""r"", encoding=""utf-8"") as file:
+                code = file.read()
+                file_bytes = code.encode()
+                tree = treesitter_parser.parser.parse(file_bytes)
+                
+                # Single pass through the AST
+                stack = [(tree.root_node, None)]
+                while stack:
+                    node, parent = stack.pop()
+                    
+                    # Check for identifiers
+                    if node.type == 'identifier':
+                        name = node.text.decode()
+                        
+                        # Check if it's a class reference
+                        if name in class_names and parent and parent.type in ['type', 'class_type', 'object_creation_expression']:
+                            references['class'][name].append({
+                                ""file"": file_path,
+                                ""line"": node.start_point[0] + 1,
+                                ""column"": node.start_point[1] + 1,
+                                ""text"": parent.text.decode()
+                            })
+                        
+                        # Check if it's a method reference
+                        if name in method_names and parent and parent.type in ['call_expression', 'method_invocation']:
+                            references['method'][name].append({
+                                ""file"": file_path,
+                                ""line"": node.start_point[0] + 1,
+                                ""column"": node.start_point[1] + 1,
+                                ""text"": parent.text.decode()
+                            })
+                    
+                    # Add children to stack with their parent
+                    stack.extend((child, node) for child in node.children)
+
+    return references",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/csv_writer.py,,create_output_directory,,"def create_output_directory(codebase_path: str) -> str:
+    normalized_path = os.path.normpath(os.path.abspath(codebase_path))
+    codebase_folder_name = os.path.basename(normalized_path)
+    output_directory = os.path.join(""processed"", codebase_folder_name)
+    os.makedirs(output_directory, exist_ok=True)
+    return output_directory",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/csv_writer.py,,write_class_data_to_csv,,"def write_class_data_to_csv(class_data: List[Dict], output_directory: str) -> None:
+    output_file = os.path.join(output_directory, ""class_data.csv"")
+    fieldnames = [""file_path"", ""class_name"", ""constructor_declaration"", ""method_declarations"", ""source_code"", ""references""]
+    
+    with open(output_file, ""w"", newline="""", encoding=""utf-8"") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in class_data:
+            references = row.get(""references"", [])
+            row[""references""] = ""; "".join([f""{ref['file']}:{ref['line']}:{ref['column']}"" for ref in references])
+            writer.writerow(row)
+    print(f""Class data written to {output_file}"")",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/csv_writer.py,,write_method_data_to_csv,,"def write_method_data_to_csv(method_data: List[Dict], output_directory: str) -> None:
+    output_file = os.path.join(output_directory, ""method_data.csv"")
+    fieldnames = [""file_path"", ""class_name"", ""name"", ""doc_comment"", ""source_code"", ""references""]
+    
+    with open(output_file, ""w"", newline="""", encoding=""utf-8"") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in method_data:
+            references = row.get(""references"", [])
+            row[""references""] = ""; "".join([f""{ref['file']}:{ref['line']}:{ref['column']}"" for ref in references])
+            writer.writerow(row)
+    print(f""Method data written to {output_file}"")",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py,Treesitter,__init__,,"def __init__(self, language: LanguageEnum):
+        self.language_enum = language
+        self.parser = get_parser(language.value)
+        self.language_obj = get_language(language.value)
+        self.query_config = LANGUAGE_QUERIES.get(language)
+        if not self.query_config:
+            raise ValueError(f""Unsupported language: {language}"")
+
+        # Corrected query instantiation
+        self.class_query = self.language_obj.query(self.query_config['class_query'])
+        self.method_query = self.language_obj.query(self.query_config['method_query'])
+        self.doc_query = self.language_obj.query(self.query_config['doc_query'])",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py,Treesitter,create_treesitter,,"def create_treesitter(language: LanguageEnum) -> ""Treesitter"":
+        return Treesitter(language)",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py,Treesitter,parse,,"def parse(self, file_bytes: bytes) -> tuple[list[TreesitterClassNode], list[TreesitterMethodNode]]:
+        tree = self.parser.parse(file_bytes)
+        root_node = tree.root_node
+
+        class_results = []
+        method_results = []
+
+        class_name_by_node = {}
+        class_captures = self.class_query.captures(root_node)
+        class_nodes = []
+        for node, capture_name in class_captures:
+            if capture_name == 'class.name':
+                class_name = node.text.decode()
+                class_node = node.parent
+                logging.info(f""Found class: {class_name}"")
+                class_name_by_node[class_node.id] = class_name
+                method_declarations = self._extract_methods_in_class(class_node)
+                class_results.append(TreesitterClassNode(class_name, method_declarations, class_node))
+                class_nodes.append(class_node)
+
+        method_captures = self.method_query.captures(root_node)
+        for node, capture_name in method_captures:
+            if capture_name in ['method.name', 'function.name']:
+                method_name = node.text.decode()
+                method_node = node.parent
+                method_source_code = method_node.text.decode()
+                doc_comment = self._extract_doc_comment(method_node)
+                parent_class_name = None
+                for class_node in class_nodes:
+                    if self._is_descendant_of(method_node, class_node):
+                        parent_class_name = class_name_by_node[class_node.id]
+                        break
+                method_results.append(TreesitterMethodNode(
+                    name=method_name,
+                    doc_comment=doc_comment,
+                    method_source_code=method_source_code,
+                    node=method_node,
+                    class_name=parent_class_name
+                ))
+
+        return class_results, method_results",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py,Treesitter,_extract_methods_in_class,,"def _extract_methods_in_class(self, class_node):
+        method_declarations = []
+        # Apply method_query to the class_node
+        method_captures = self.method_query.captures(class_node)
+        for node, capture_name in method_captures:
+            if capture_name in ['method.name', 'function.name']:
+                method_declaration = node.parent.text.decode()
+                method_declarations.append(method_declaration)
+        return method_declarations",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py,Treesitter,_extract_doc_comment,,"def _extract_doc_comment(self, node):
+        # Search for doc comments preceding the node
+        doc_comment = ''
+        current_node = node.prev_sibling
+        while current_node:
+            captures = self.doc_query.captures(current_node)
+            if captures:
+                for cap_node, cap_name in captures:
+                    if cap_name == 'comment':
+                        doc_comment = cap_node.text.decode() + '\n' + doc_comment
+            elif current_node.type not in ['comment', 'block_comment', 'line_comment', 'expression_statement']:
+                # Stop if we reach a node that's not a comment
+                break
+            current_node = current_node.prev_sibling
+        return doc_comment.strip()",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/treesitter.py,Treesitter,_is_descendant_of,,"def _is_descendant_of(self, node, ancestor):
+        # Check if 'node' is a descendant of 'ancestor'
+        current = node.parent
+        while current:
+            if current == ancestor:
+                return True
+            current = current.parent
+        return False",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/nodes.py,TreesitterMethodNode,__init__,,"def __init__(
+        self,
+        name: str,
+        doc_comment: str,
+        method_source_code: str,
+        node,
+        class_name: str = None
+    ):
+        self.name = name
+        self.doc_comment = doc_comment
+        self.method_source_code = method_source_code
+        self.node = node
+        self.class_name = class_name",
+/Users/absonson/Projects/codebase_reader/Preprocessing/Treesitter/nodes.py,TreesitterClassNode,__init__,,"def __init__(
+        self,
+        name: str,
+        method_declarations: list,
+        node,
+    ):
+        self.name = name
+        self.source_code = node.text.decode()
+        self.method_declarations = method_declarations
+        self.node = node",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,__init__,,"def __init__(self, db_path: str = ""processed/codebase.db""):
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(db_path)
+        self.cursor = self.conn.cursor()
+        self._create_tables()",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,_create_tables,,"def _create_tables(self):
+        # Create files table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filepath TEXT UNIQUE NOT NULL,
+                module_docstring TEXT
+            )
+        """""")
+
+        # Create dependencies table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create classes table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS classes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                docstring TEXT,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create functions table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS functions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                docstring TEXT,
+                class_name TEXT,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+
+        # Create variables table
+        self.cursor.execute(""""""
+            CREATE TABLE IF NOT EXISTS variables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER,
+                name TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        """""")
+        
+        self.conn.commit()",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,add_file,,"def add_file(self, file_info: FileInfo) -> int:
+        self.cursor.execute(
+            ""INSERT INTO files (filepath, module_docstring) VALUES (?, ?)"",
+            (file_info.filepath, file_info.module_docstring)
+        )
+        self.conn.commit()
+        return self.cursor.lastrowid",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,add_dependency,,"def add_dependency(self, dependency: Dependency):
+        self.cursor.execute(
+            ""INSERT INTO dependencies (file_id, name, line) VALUES (?, ?, ?)"",
+            (dependency.file_id, dependency.name, dependency.line)
+        )
+        self.conn.commit()",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,add_class,,"def add_class(self, class_info: ClassInfo):
+        self.cursor.execute(
+            ""INSERT INTO classes (file_id, name, line, docstring) VALUES (?, ?, ?, ?)"",
+            (class_info.file_id, class_info.name, class_info.line, class_info.docstring)
+        )
+        self.conn.commit()",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,add_function,,"def add_function(self, function_info: FunctionInfo):
+        self.cursor.execute(
+            ""INSERT INTO functions (file_id, name, line, docstring, class_name) VALUES (?, ?, ?, ?, ?)"",
+            (function_info.file_id, function_info.name, function_info.line, 
+             function_info.docstring, function_info.class_name)
+        )
+        self.conn.commit()",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,add_variable,,"def add_variable(self, variable_info: VariableInfo):
+        self.cursor.execute(
+            ""INSERT INTO variables (file_id, name, line) VALUES (?, ?, ?)"",
+            (variable_info.file_id, variable_info.name, variable_info.line)
+        )
+        self.conn.commit()",
+/Users/absonson/Projects/codebase_reader/Preprocessing/file_handlers/db_writer.py,DatabaseWriter,close,,"def close(self):
+        self.conn.close()",
